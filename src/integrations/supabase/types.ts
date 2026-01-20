@@ -42,6 +42,7 @@ export type Database = {
           description: string | null
           id: string
           menu_date: string
+          menu_type_id: string | null
           total_cost: number
           updated_at: string
         }
@@ -51,6 +52,7 @@ export type Database = {
           description?: string | null
           id?: string
           menu_date: string
+          menu_type_id?: string | null
           total_cost?: number
           updated_at?: string
         }
@@ -60,10 +62,19 @@ export type Database = {
           description?: string | null
           id?: string
           menu_date?: string
+          menu_type_id?: string | null
           total_cost?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "daily_menus_menu_type_id_fkey"
+            columns: ["menu_type_id"]
+            isOneToOne: false
+            referencedRelation: "menu_types"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       kits: {
         Row: {
@@ -172,6 +183,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      menu_types: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       products: {
         Row: {

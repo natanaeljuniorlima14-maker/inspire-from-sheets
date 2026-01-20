@@ -32,6 +32,7 @@ export interface MenuKit {
 export interface DailyMenu {
   id: string;
   menu_date: string;
+  menu_type_id: string | null;
   description: string | null;
   total_cost: number;
   created_by: string | null;
@@ -39,11 +40,15 @@ export interface DailyMenu {
   updated_at: string;
   menu_ingredients?: MenuIngredient[];
   menu_kits?: MenuKit[];
+  menu_types?: {
+    id: string;
+    name: string;
+  };
 }
 
-export function useMenus(month?: Date) {
+export function useMenus(month?: Date, menuTypeId?: string) {
   return useQuery({
-    queryKey: ['menus', month ? format(month, 'yyyy-MM') : 'all'],
+    queryKey: ['menus', month ? format(month, 'yyyy-MM') : 'all', menuTypeId || 'all'],
     queryFn: async () => {
       let query = supabase
         .from('daily_menus')
@@ -65,6 +70,10 @@ export function useMenus(month?: Date) {
               name,
               price
             )
+          ),
+          menu_types (
+            id,
+            name
           )
         `)
         .order('menu_date');
@@ -76,6 +85,10 @@ export function useMenus(month?: Date) {
         const endOfMonth = format(nextMonth, 'yyyy-MM-01');
         
         query = query.gte('menu_date', startOfMonth).lt('menu_date', endOfMonth);
+      }
+
+      if (menuTypeId) {
+        query = query.eq('menu_type_id', menuTypeId);
       }
 
       const { data, error } = await query;
@@ -90,7 +103,7 @@ export function useCreateMenu() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (menu: { menu_date: string; description: string }) => {
+    mutationFn: async (menu: { menu_date: string; description: string; menu_type_id?: string }) => {
       const { data, error } = await supabase
         .from('daily_menus')
         .insert(menu)
@@ -106,6 +119,82 @@ export function useCreateMenu() {
     },
     onError: (error) => {
       toast({ title: 'Erro ao criar cardápio', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+export function useDuplicateMenu() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ sourceMenuId, targetDate, targetMenuTypeId }: { sourceMenuId: string; targetDate: string; targetMenuTypeId?: string }) => {
+      // Get the source menu with all data
+      const { data: sourceMenu, error: fetchError } = await supabase
+        .from('daily_menus')
+        .select(`
+          *,
+          menu_ingredients (*),
+          menu_kits (*)
+        `)
+        .eq('id', sourceMenuId)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      
+      // Create new menu
+      const { data: newMenu, error: createError } = await supabase
+        .from('daily_menus')
+        .insert({
+          menu_date: targetDate,
+          description: sourceMenu.description,
+          total_cost: sourceMenu.total_cost,
+          menu_type_id: targetMenuTypeId || sourceMenu.menu_type_id,
+        })
+        .select()
+        .single();
+      
+      if (createError) throw createError;
+      
+      // Copy ingredients
+      if (sourceMenu.menu_ingredients?.length > 0) {
+        const ingredients = sourceMenu.menu_ingredients.map((ing: MenuIngredient) => ({
+          menu_id: newMenu.id,
+          product_id: ing.product_id,
+          per_capita: ing.per_capita,
+          cost: ing.cost,
+        }));
+        
+        const { error: ingredientsError } = await supabase
+          .from('menu_ingredients')
+          .insert(ingredients);
+        
+        if (ingredientsError) throw ingredientsError;
+      }
+      
+      // Copy kits
+      if (sourceMenu.menu_kits?.length > 0) {
+        const kits = sourceMenu.menu_kits.map((kit: MenuKit) => ({
+          menu_id: newMenu.id,
+          kit_id: kit.kit_id,
+          cost: kit.cost,
+        }));
+        
+        const { error: kitsError } = await supabase
+          .from('menu_kits')
+          .insert(kits);
+        
+        if (kitsError) throw kitsError;
+      }
+      
+      return newMenu;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['menus'] });
+      toast({ title: 'Cardápio duplicado!' });
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao duplicar cardápio', description: error.message, variant: 'destructive' });
     },
   });
 }
