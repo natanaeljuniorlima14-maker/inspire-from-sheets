@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef } from 'react';
 import { format, addMonths, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useMenus, DailyMenu } from '@/hooks/useMenus';
+import { useMenus } from '@/hooks/useMenus';
 import { useMenuTypes } from '@/hooks/useMenuTypes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { 
   FileText, 
   Download, 
@@ -27,6 +29,7 @@ const COLORS = ['hsl(142, 55%, 40%)', 'hsl(35, 90%, 55%)', 'hsl(200, 70%, 50%)',
 export default function Reports() {
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedMenuTypeId, setSelectedMenuTypeId] = useState<string>('all');
+  const [selectedComparisonTypeIds, setSelectedComparisonTypeIds] = useState<string[]>([]);
   const reportRef = useRef<HTMLDivElement>(null);
   
   const { data: menuTypes } = useMenuTypes();
@@ -106,19 +109,25 @@ export default function Reports() {
     return Array.from(categoryMap.entries()).map(([name, value]) => ({ name, value }));
   }, [menus]);
 
-  // Comparison data by menu type
+  // Comparison data by menu type - filtered by selected types
   const comparisonData = useMemo(() => {
     if (!allMenus || !menuTypes) return [];
     
-    const typeStats = new Map<string, { name: string; totalCost: number; days: number; averageCost: number }>();
+    const typeStats = new Map<string, { id: string; name: string; totalCost: number; days: number; averageCost: number }>();
     
-    // Initialize with all types
-    menuTypes.forEach(type => {
-      typeStats.set(type.id, { name: type.name, totalCost: 0, days: 0, averageCost: 0 });
+    // Initialize with all types or only selected types
+    const typesToShow = selectedComparisonTypeIds.length > 0 
+      ? menuTypes.filter(t => selectedComparisonTypeIds.includes(t.id))
+      : menuTypes;
+    
+    typesToShow.forEach(type => {
+      typeStats.set(type.id, { id: type.id, name: type.name, totalCost: 0, days: 0, averageCost: 0 });
     });
     
-    // Add "Sem tipo" for menus without type
-    typeStats.set('no-type', { name: 'Sem tipo', totalCost: 0, days: 0, averageCost: 0 });
+    // Add "Sem tipo" for menus without type (only if no specific types selected)
+    if (selectedComparisonTypeIds.length === 0) {
+      typeStats.set('no-type', { id: 'no-type', name: 'Sem tipo', totalCost: 0, days: 0, averageCost: 0 });
+    }
     
     allMenus.forEach(menu => {
       const typeId = menu.menu_type_id || 'no-type';
@@ -135,7 +144,23 @@ export default function Reports() {
         ...stat,
         averageCost: stat.days > 0 ? stat.totalCost / stat.days : 0,
       }));
-  }, [allMenus, menuTypes]);
+  }, [allMenus, menuTypes, selectedComparisonTypeIds]);
+
+  const handleToggleComparisonType = (typeId: string) => {
+    setSelectedComparisonTypeIds(prev => 
+      prev.includes(typeId) 
+        ? prev.filter(id => id !== typeId)
+        : [...prev, typeId]
+    );
+  };
+
+  const handleSelectAllTypes = () => {
+    if (selectedComparisonTypeIds.length === menuTypes?.length) {
+      setSelectedComparisonTypeIds([]);
+    } else {
+      setSelectedComparisonTypeIds(menuTypes?.map(t => t.id) || []);
+    }
+  };
 
   const handleExportPDF = async () => {
     if (!reportRef.current) return;
@@ -264,7 +289,7 @@ export default function Reports() {
           <div className="flex flex-wrap items-center gap-3">
             <Select 
               value={format(selectedMonth, 'yyyy-MM')}
-              onValueChange={(value) => setSelectedMonth(new Date(value + '-01'))}
+              onValueChange={(value) => setSelectedMonth(parseISO(value + '-15'))}
             >
               <SelectTrigger className="w-48">
                 <Calendar className="h-4 w-4 mr-2" />
@@ -433,12 +458,56 @@ export default function Reports() {
           </TabsContent>
 
           <TabsContent value="comparison" className="space-y-6">
+            {/* Type Selection for Comparison */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Selecione os tipos para comparar</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-4">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="select-all-types"
+                      checked={selectedComparisonTypeIds.length === menuTypes?.length}
+                      onCheckedChange={handleSelectAllTypes}
+                    />
+                    <Label htmlFor="select-all-types" className="cursor-pointer font-medium">
+                      Selecionar todos
+                    </Label>
+                  </div>
+                  <div className="w-px h-6 bg-border" />
+                  {menuTypes?.map((type) => (
+                    <div key={type.id} className="flex items-center space-x-2">
+                      <Checkbox 
+                        id={`type-${type.id}`}
+                        checked={selectedComparisonTypeIds.includes(type.id)}
+                        onCheckedChange={() => handleToggleComparisonType(type.id)}
+                      />
+                      <Label htmlFor={`type-${type.id}`} className="cursor-pointer">
+                        {type.name}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+                {selectedComparisonTypeIds.length === 0 && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Nenhum tipo selecionado. Mostrando todos os tipos disponíveis.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Comparison by Menu Type */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <BarChart3 className="h-5 w-5" />
                   Comparação entre Tipos de Cardápio
+                  {selectedComparisonTypeIds.length > 0 && (
+                    <Badge variant="outline" className="ml-2">
+                      {selectedComparisonTypeIds.length} selecionado(s)
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent>

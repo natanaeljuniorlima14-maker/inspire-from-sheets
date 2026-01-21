@@ -142,6 +142,18 @@ export function useDuplicateMenu() {
       
       if (fetchError) throw fetchError;
       
+      // Check if a menu already exists for this date and type
+      const { data: existingMenu } = await supabase
+        .from('daily_menus')
+        .select('id')
+        .eq('menu_date', targetDate)
+        .eq('menu_type_id', targetMenuTypeId || sourceMenu.menu_type_id)
+        .maybeSingle();
+      
+      if (existingMenu) {
+        throw new Error('Já existe um cardápio para esta data e tipo. Escolha outra data ou tipo.');
+      }
+      
       // Create new menu
       const { data: newMenu, error: createError } = await supabase
         .from('daily_menus')
@@ -195,6 +207,106 @@ export function useDuplicateMenu() {
     },
     onError: (error) => {
       toast({ title: 'Erro ao duplicar cardápio', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+export function useDuplicateMenuType() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ sourceTypeId, targetTypeId, month }: { sourceTypeId: string; targetTypeId: string; month: Date }) => {
+      const startOfMonth = format(month, 'yyyy-MM-01');
+      const nextMonth = new Date(month);
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      const endOfMonth = format(nextMonth, 'yyyy-MM-01');
+      
+      // Get all menus from source type for this month
+      const { data: sourceMenus, error: fetchError } = await supabase
+        .from('daily_menus')
+        .select(`
+          *,
+          menu_ingredients (*),
+          menu_kits (*)
+        `)
+        .eq('menu_type_id', sourceTypeId)
+        .gte('menu_date', startOfMonth)
+        .lt('menu_date', endOfMonth);
+      
+      if (fetchError) throw fetchError;
+      if (!sourceMenus || sourceMenus.length === 0) {
+        throw new Error('Nenhum cardápio encontrado no tipo de origem.');
+      }
+      
+      let duplicatedCount = 0;
+      let skippedCount = 0;
+      
+      for (const sourceMenu of sourceMenus) {
+        // Check if menu already exists for this date and target type
+        const { data: existingMenu } = await supabase
+          .from('daily_menus')
+          .select('id')
+          .eq('menu_date', sourceMenu.menu_date)
+          .eq('menu_type_id', targetTypeId)
+          .maybeSingle();
+        
+        if (existingMenu) {
+          skippedCount++;
+          continue;
+        }
+        
+        // Create new menu
+        const { data: newMenu, error: createError } = await supabase
+          .from('daily_menus')
+          .insert({
+            menu_date: sourceMenu.menu_date,
+            description: sourceMenu.description,
+            total_cost: sourceMenu.total_cost,
+            menu_type_id: targetTypeId,
+          })
+          .select()
+          .single();
+        
+        if (createError) throw createError;
+        
+        // Copy ingredients
+        if (sourceMenu.menu_ingredients?.length > 0) {
+          const ingredients = sourceMenu.menu_ingredients.map((ing: MenuIngredient) => ({
+            menu_id: newMenu.id,
+            product_id: ing.product_id,
+            per_capita: ing.per_capita,
+            cost: ing.cost,
+          }));
+          
+          await supabase.from('menu_ingredients').insert(ingredients);
+        }
+        
+        // Copy kits
+        if (sourceMenu.menu_kits?.length > 0) {
+          const kits = sourceMenu.menu_kits.map((kit: MenuKit) => ({
+            menu_id: newMenu.id,
+            kit_id: kit.kit_id,
+            cost: kit.cost,
+          }));
+          
+          await supabase.from('menu_kits').insert(kits);
+        }
+        
+        duplicatedCount++;
+      }
+      
+      return { duplicatedCount, skippedCount };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['menus'] });
+      toast({ 
+        title: 'Tipo de cardápio duplicado!',
+        description: `${result.duplicatedCount} cardápios copiados. ${result.skippedCount > 0 ? `${result.skippedCount} ignorados (já existentes).` : ''}`
+      });
+    },
+    onError: (error) => {
+      toast({ title: 'Erro ao duplicar tipo', description: error.message, variant: 'destructive' });
     },
   });
 }
