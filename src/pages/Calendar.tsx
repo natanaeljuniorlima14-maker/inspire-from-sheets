@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, getDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useMenus, useCreateMenu, useUpdateMenu, useDeleteMenu, useAddIngredient, useRemoveIngredient, useAddKit, useRemoveKit, useDuplicateMenu, DailyMenu } from '@/hooks/useMenus';
+import { useMenus, useCreateMenu, useUpdateMenu, useDeleteMenu, useAddIngredient, useRemoveIngredient, useAddKit, useRemoveKit, useDuplicateMenu, useDuplicateMenuType, DailyMenu } from '@/hooks/useMenus';
 import { useMenuTypes, useCreateMenuType } from '@/hooks/useMenuTypes';
 import { useProducts } from '@/hooks/useProducts';
 import { useKits } from '@/hooks/useKits';
@@ -26,7 +26,8 @@ import {
   Check,
   ChevronsUpDown,
   Copy,
-  Settings
+  Settings,
+  Layers
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { cn } from '@/lib/utils';
@@ -36,6 +37,7 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDuplicateDialogOpen, setIsDuplicateDialogOpen] = useState(false);
+  const [isDuplicateTypeDialogOpen, setIsDuplicateTypeDialogOpen] = useState(false);
   const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false);
   const [description, setDescription] = useState('');
   const [productSearch, setProductSearch] = useState('');
@@ -45,6 +47,8 @@ export default function CalendarPage() {
   const [selectedMenuTypeId, setSelectedMenuTypeId] = useState<string>('all');
   const [duplicateTargetDate, setDuplicateTargetDate] = useState('');
   const [duplicateTargetTypeId, setDuplicateTargetTypeId] = useState<string>('');
+  const [duplicateSourceTypeId, setDuplicateSourceTypeId] = useState<string>('');
+  const [duplicateDestTypeId, setDuplicateDestTypeId] = useState<string>('');
   const [newTypeName, setNewTypeName] = useState('');
 
   const { data: menuTypes } = useMenuTypes();
@@ -59,6 +63,7 @@ export default function CalendarPage() {
   const addKit = useAddKit();
   const removeKit = useRemoveKit();
   const duplicateMenu = useDuplicateMenu();
+  const duplicateMenuType = useDuplicateMenuType();
   const createMenuType = useCreateMenuType();
 
   // Filter only weekdays (Monday to Friday)
@@ -223,6 +228,22 @@ export default function CalendarPage() {
     setIsDialogOpen(false);
   };
 
+  const handleOpenDuplicateType = () => {
+    setDuplicateSourceTypeId('');
+    setDuplicateDestTypeId('');
+    setIsDuplicateTypeDialogOpen(true);
+  };
+
+  const handleConfirmDuplicateType = async () => {
+    if (!duplicateSourceTypeId || !duplicateDestTypeId) return;
+    await duplicateMenuType.mutateAsync({
+      sourceTypeId: duplicateSourceTypeId,
+      targetTypeId: duplicateDestTypeId,
+      month: currentMonth,
+    });
+    setIsDuplicateTypeDialogOpen(false);
+  };
+
   const handleCreateMenuType = async () => {
     if (!newTypeName.trim()) return;
     await createMenuType.mutateAsync({ name: newTypeName.trim() });
@@ -281,6 +302,10 @@ export default function CalendarPage() {
               </SelectContent>
             </Select>
             
+            <Button variant="outline" size="icon" onClick={handleOpenDuplicateType} title="Duplicar tipo de cardápio">
+              <Layers className="h-4 w-4" />
+            </Button>
+            
             <Button variant="outline" size="icon" onClick={() => setIsTypeDialogOpen(true)} title="Gerenciar tipos">
               <Settings className="h-4 w-4" />
             </Button>
@@ -291,7 +316,7 @@ export default function CalendarPage() {
               </Button>
               <Select 
                 value={format(currentMonth, 'yyyy-MM')}
-                onValueChange={(value) => setCurrentMonth(new Date(value + '-01'))}
+                onValueChange={(value) => setCurrentMonth(parseISO(value + '-15'))}
               >
                 <SelectTrigger className="w-40">
                   <SelectValue />
@@ -655,6 +680,62 @@ export default function CalendarPage() {
               </Button>
               <Button onClick={handleCreateMenuType} disabled={!newTypeName.trim() || createMenuType.isPending}>
                 Criar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Duplicate Menu Type Dialog */}
+        <Dialog open={isDuplicateTypeDialogOpen} onOpenChange={setIsDuplicateTypeDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Duplicar Tipo de Cardápio</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                Copie todos os cardápios de um tipo para outro no mês de {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}.
+              </p>
+              <div className="space-y-2">
+                <Label>Tipo de origem</Label>
+                <Select value={duplicateSourceTypeId} onValueChange={setDuplicateSourceTypeId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo de origem" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {menuTypes?.map((type) => (
+                      <SelectItem key={type.id} value={type.id}>
+                        {type.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Tipo de destino</Label>
+                <Select value={duplicateDestTypeId} onValueChange={setDuplicateDestTypeId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo de destino" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {menuTypes?.filter(t => t.id !== duplicateSourceTypeId).map((type) => (
+                      <SelectItem key={type.id} value={type.id}>
+                        {type.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDuplicateTypeDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleConfirmDuplicateType} 
+                disabled={!duplicateSourceTypeId || !duplicateDestTypeId || duplicateMenuType.isPending}
+              >
+                {duplicateMenuType.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Layers className="h-4 w-4 mr-2" />}
+                Duplicar Tipo
               </Button>
             </DialogFooter>
           </DialogContent>
