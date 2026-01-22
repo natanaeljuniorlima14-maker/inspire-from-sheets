@@ -42,7 +42,7 @@ export type Database = {
           description: string | null
           id: string
           menu_date: string
-          menu_type_id: string | null
+          menu_type_id: string
           total_cost: number
           updated_at: string
         }
@@ -52,7 +52,7 @@ export type Database = {
           description?: string | null
           id?: string
           menu_date: string
-          menu_type_id?: string | null
+          menu_type_id?: string
           total_cost?: number
           updated_at?: string
         }
@@ -62,7 +62,7 @@ export type Database = {
           description?: string | null
           id?: string
           menu_date?: string
-          menu_type_id?: string | null
+          menu_type_id?: string
           total_cost?: number
           updated_at?: string
         }
@@ -284,7 +284,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      default_menu_type_id: { Args: never; Returns: string }
     }
     Enums: {
       [_ in never]: never
