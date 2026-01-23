@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-export type AppRole = 'admin' | 'user';
+export type AppRole = 'admin' | 'pcp' | 'user';
 
 interface UserRole {
   id: string;
@@ -35,12 +35,16 @@ export function useUserRole() {
   });
 
   const isAdmin = roles?.some((r) => r.role === 'admin') ?? false;
+  const isPcp = roles?.some((r) => r.role === 'pcp') ?? false;
   const isUser = roles?.some((r) => r.role === 'user') ?? false;
+  const canEdit = isAdmin || isPcp;
 
   return {
     roles,
     isAdmin,
+    isPcp,
     isUser,
+    canEdit,
     isLoading,
     hasRole: (role: AppRole) => roles?.some((r) => r.role === role) ?? false,
   };
