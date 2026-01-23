@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUserRole } from '@/hooks/useUserRole';
 import { Button } from '@/components/ui/button';
 import { 
   LayoutDashboard, 
@@ -10,7 +11,8 @@ import {
   LogOut, 
   Utensils,
   Menu,
-  X
+  X,
+  Users
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -19,17 +21,29 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-const navItems = [
+interface NavItem {
+  to: string;
+  label: string;
+  icon: any;
+  adminOnly?: boolean;
+}
+
+const navItems: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/products', label: 'Produtos', icon: Package },
   { to: '/calendar', label: 'Cardápio', icon: Calendar },
   { to: '/reports', label: 'Relatórios', icon: FileText },
+  { to: '/users', label: 'Usuários', icon: Users, adminOnly: true },
 ];
 
 export default function Layout({ children }: LayoutProps) {
   const { signOut, user } = useAuth();
+  const { isAdmin } = useUserRole();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Filter nav items based on role
+  const filteredNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <div className="min-h-screen bg-background">
@@ -70,7 +84,7 @@ export default function Layout({ children }: LayoutProps) {
         {/* Sidebar - Desktop */}
         <aside className="hidden lg:flex flex-col w-64 border-r bg-card min-h-[calc(100vh-4rem)]">
           <nav className="flex-1 p-4 space-y-1">
-            {navItems.map((item) => (
+            {filteredNavItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -95,7 +109,7 @@ export default function Layout({ children }: LayoutProps) {
           <div className="lg:hidden fixed inset-0 z-40 bg-background/80 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)}>
             <aside className="absolute left-0 top-16 w-64 bg-card border-r h-[calc(100vh-4rem)] shadow-lg" onClick={(e) => e.stopPropagation()}>
               <nav className="p-4 space-y-1">
-                {navItems.map((item) => (
+                {filteredNavItems.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}

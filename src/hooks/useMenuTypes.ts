@@ -83,6 +83,17 @@ export function useDeleteMenuType() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      // First check if there are menus using this type
+      const { data: menusWithType } = await supabase
+        .from('daily_menus')
+        .select('id')
+        .eq('menu_type_id', id)
+        .limit(1);
+      
+      if (menusWithType && menusWithType.length > 0) {
+        throw new Error('Não é possível excluir este tipo pois existem cardápios associados a ele. Remova os cardápios primeiro.');
+      }
+      
       const { error } = await supabase
         .from('menu_types')
         .delete()
@@ -92,10 +103,10 @@ export function useDeleteMenuType() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['menu-types'] });
-      toast({ title: 'Tipo removido!' });
+      toast({ title: 'Tipo de cardápio removido!' });
     },
     onError: (error) => {
-      toast({ title: 'Erro ao remover', description: error.message, variant: 'destructive' });
+      toast({ title: 'Erro ao remover tipo', description: error.message, variant: 'destructive' });
     },
   });
 }

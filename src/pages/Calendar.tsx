@@ -2,9 +2,10 @@ import { useState, useMemo } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, getDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useMenus, useCreateMenu, useUpdateMenu, useDeleteMenu, useAddIngredient, useRemoveIngredient, useAddKit, useRemoveKit, useDuplicateMenu, useDuplicateMenuType, DailyMenu } from '@/hooks/useMenus';
-import { useMenuTypes, useCreateMenuType } from '@/hooks/useMenuTypes';
+import { useMenuTypes, useCreateMenuType, useDeleteMenuType } from '@/hooks/useMenuTypes';
 import { useProducts } from '@/hooks/useProducts';
 import { useKits } from '@/hooks/useKits';
+import { useUserRole } from '@/hooks/useUserRole';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,7 +28,8 @@ import {
   ChevronsUpDown,
   Copy,
   Settings,
-  Layers
+  Layers,
+  Save
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { cn } from '@/lib/utils';
@@ -50,7 +52,9 @@ export default function CalendarPage() {
   const [duplicateSourceTypeId, setDuplicateSourceTypeId] = useState<string>('');
   const [duplicateDestTypeId, setDuplicateDestTypeId] = useState<string>('');
   const [newTypeName, setNewTypeName] = useState('');
+  const [typeToDelete, setTypeToDelete] = useState<string | null>(null);
 
+  const { isAdmin } = useUserRole();
   const { data: menuTypes } = useMenuTypes();
   const { data: menus, isLoading } = useMenus(currentMonth, selectedMenuTypeId === 'all' ? undefined : selectedMenuTypeId);
   const { data: products } = useProducts();
@@ -65,6 +69,7 @@ export default function CalendarPage() {
   const duplicateMenu = useDuplicateMenu();
   const duplicateMenuType = useDuplicateMenuType();
   const createMenuType = useCreateMenuType();
+  const deleteMenuType = useDeleteMenuType();
 
   // Filter only weekdays (Monday to Friday)
   const days = useMemo(() => {
@@ -180,24 +185,18 @@ export default function CalendarPage() {
     const existingKit = selectedMenu.menu_kits?.find(mk => mk.kit_id === kitId);
     
     if (existingKit) {
-      await removeKit.mutateAsync(existingKit.id);
-      const ingredientsCost = selectedMenu.menu_ingredients?.reduce((sum, i) => sum + i.cost, 0) || 0;
-      const kitsCost = (selectedMenu.menu_kits?.reduce((sum, k) => sum + k.cost, 0) || 0) - existingKit.cost;
-      await updateMenu.mutateAsync({ 
-        id: selectedMenu.id, 
-        total_cost: ingredientsCost + kitsCost 
+      // Optimistic update handles total_cost recalculation
+      await removeKit.mutateAsync({ 
+        id: existingKit.id, 
+        menu_id: selectedMenu.id, 
+        cost: existingKit.cost 
       });
     } else {
+      // Optimistic update handles total_cost recalculation
       await addKit.mutateAsync({
         menu_id: selectedMenu.id,
         kit_id: kitId,
         cost: kitPrice,
-      });
-      const ingredientsCost = selectedMenu.menu_ingredients?.reduce((sum, i) => sum + i.cost, 0) || 0;
-      const kitsCost = (selectedMenu.menu_kits?.reduce((sum, k) => sum + k.cost, 0) || 0) + kitPrice;
-      await updateMenu.mutateAsync({ 
-        id: selectedMenu.id, 
-        total_cost: ingredientsCost + kitsCost 
       });
     }
   };
@@ -251,6 +250,12 @@ export default function CalendarPage() {
     setIsTypeDialogOpen(false);
   };
 
+  const handleDeleteMenuType = async (typeId: string) => {
+    if (confirm('Tem certeza que deseja excluir este tipo de cardápio?')) {
+      await deleteMenuType.mutateAsync(typeId);
+    }
+  };
+
   const totalCost = useMemo(() => {
     if (!selectedMenu) return 0;
     const ingredientsCost = selectedMenu.menu_ingredients?.reduce((sum, i) => sum + i.cost, 0) || 0;
@@ -258,14 +263,26 @@ export default function CalendarPage() {
     return ingredientsCost + kitsCost;
   }, [selectedMenu]);
 
-  // Generate months for navigation (12 months back and 12 months forward)
+  // Generate months for navigation with current month first
   const availableMonths = useMemo(() => {
-    const result = [];
+    const months: Date[] = [];
     for (let i = -12; i <= 12; i++) {
-      result.push(addMonths(new Date(), i));
+      months.push(addMonths(new Date(), i));
     }
-    return result;
-  }, []);
+    
+    const currentMonthStr = format(currentMonth, 'yyyy-MM');
+    
+    // Sort so current month is first, then chronologically
+    return months.sort((a, b) => {
+      const aStr = format(a, 'yyyy-MM');
+      const bStr = format(b, 'yyyy-MM');
+      
+      if (aStr === currentMonthStr) return -1;
+      if (bStr === currentMonthStr) return 1;
+      
+      return a.getTime() - b.getTime();
+    });
+  }, [currentMonth]);
 
   if (isLoading) {
     return (
@@ -600,6 +617,15 @@ export default function CalendarPage() {
                       </div>
                     </CardContent>
                   </Card>
+
+                  {/* Save Button */}
+                  <Button 
+                    className="w-full bg-success hover:bg-success/90 text-success-foreground"
+                    onClick={() => setIsDialogOpen(false)}
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    Salvar e Fechar
+                  </Button>
                 </>
               )}
             </div>
@@ -650,36 +676,51 @@ export default function CalendarPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Create Menu Type Dialog */}
+        {/* Manage Menu Type Dialog */}
         <Dialog open={isTypeDialogOpen} onOpenChange={setIsTypeDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Criar Tipo de Cardápio</DialogTitle>
+              <DialogTitle>Gerenciar Tipos de Cardápio</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Nome do tipo</Label>
-                <Input
-                  placeholder="Ex: Creche, Fundamental, Integral..."
-                  value={newTypeName}
-                  onChange={(e) => setNewTypeName(e.target.value)}
-                />
+                <Label>Criar novo tipo</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Ex: Creche, Fundamental, Integral..."
+                    value={newTypeName}
+                    onChange={(e) => setNewTypeName(e.target.value)}
+                  />
+                  <Button onClick={handleCreateMenuType} disabled={!newTypeName.trim() || createMenuType.isPending}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label className="text-muted-foreground">Tipos existentes:</Label>
-                <div className="flex flex-wrap gap-2">
+                <div className="space-y-2">
                   {menuTypes?.map((type) => (
-                    <Badge key={type.id} variant="secondary">{type.name}</Badge>
+                    <div key={type.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <span className="font-medium">{type.name}</span>
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteMenuType(type.id)}
+                          disabled={deleteMenuType.isPending}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsTypeDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleCreateMenuType} disabled={!newTypeName.trim() || createMenuType.isPending}>
-                Criar
+                Fechar
               </Button>
             </DialogFooter>
           </DialogContent>

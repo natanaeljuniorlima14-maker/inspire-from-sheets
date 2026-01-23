@@ -310,6 +310,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_admin_or_pcp: { Args: { _user_id: string }; Returns: boolean }
       is_authenticated: { Args: never; Returns: boolean }
     }
     Enums: {

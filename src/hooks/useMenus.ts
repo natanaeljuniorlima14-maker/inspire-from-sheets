@@ -411,7 +411,36 @@ export function useAddKit() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onMutate: async ({ menu_id, kit_id, cost }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['menus'] });
+      
+      // Snapshot current cache for rollback
+      const previousMenus = queryClient.getQueryData(['menus']);
+      
+      // Optimistic update
+      queryClient.setQueriesData({ queryKey: ['menus'] }, (old: any) => {
+        if (!old) return old;
+        return old.map((menu: DailyMenu) => {
+          if (menu.id === menu_id) {
+            return {
+              ...menu,
+              menu_kits: [...(menu.menu_kits || []), { id: 'temp-' + kit_id, menu_id, kit_id, cost }],
+              total_cost: menu.total_cost + cost,
+            };
+          }
+          return menu;
+        });
+      });
+      
+      return { previousMenus };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousMenus) {
+        queryClient.setQueriesData({ queryKey: ['menus'] }, context.previousMenus);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['menus'] });
     },
   });
@@ -421,7 +450,7 @@ export function useRemoveKit() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, menu_id, cost }: { id: string; menu_id: string; cost: number }) => {
       const { error } = await supabase
         .from('menu_kits')
         .delete()
@@ -429,7 +458,33 @@ export function useRemoveKit() {
       
       if (error) throw error;
     },
-    onSuccess: () => {
+    onMutate: async ({ id, menu_id, cost }) => {
+      await queryClient.cancelQueries({ queryKey: ['menus'] });
+      
+      const previousMenus = queryClient.getQueryData(['menus']);
+      
+      queryClient.setQueriesData({ queryKey: ['menus'] }, (old: any) => {
+        if (!old) return old;
+        return old.map((menu: DailyMenu) => {
+          if (menu.id === menu_id) {
+            return {
+              ...menu,
+              menu_kits: (menu.menu_kits || []).filter((k: MenuKit) => k.id !== id),
+              total_cost: Math.max(0, menu.total_cost - cost),
+            };
+          }
+          return menu;
+        });
+      });
+      
+      return { previousMenus };
+    },
+    onError: (err, variables, context) => {
+      if (context?.previousMenus) {
+        queryClient.setQueriesData({ queryKey: ['menus'] }, context.previousMenus);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['menus'] });
     },
   });
