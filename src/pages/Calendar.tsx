@@ -6,6 +6,7 @@ import { useMenuTypes, useCreateMenuType, useDeleteMenuType } from '@/hooks/useM
 import { useProducts } from '@/hooks/useProducts';
 import { useKits } from '@/hooks/useKits';
 import { useUserRole } from '@/hooks/useUserRole';
+import { MonthSelector } from '@/components/MonthSelector';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -263,26 +264,6 @@ export default function CalendarPage() {
     return ingredientsCost + kitsCost;
   }, [selectedMenu]);
 
-  // Generate months for navigation with current month first
-  const availableMonths = useMemo(() => {
-    const months: Date[] = [];
-    for (let i = -12; i <= 12; i++) {
-      months.push(addMonths(new Date(), i));
-    }
-    
-    const currentMonthStr = format(currentMonth, 'yyyy-MM');
-    
-    // Sort so current month is first, then chronologically
-    return months.sort((a, b) => {
-      const aStr = format(a, 'yyyy-MM');
-      const bStr = format(b, 'yyyy-MM');
-      
-      if (aStr === currentMonthStr) return -1;
-      if (bStr === currentMonthStr) return 1;
-      
-      return a.getTime() - b.getTime();
-    });
-  }, [currentMonth]);
 
   if (isLoading) {
     return (
@@ -331,21 +312,11 @@ export default function CalendarPage() {
               <Button variant="outline" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Select 
-                value={format(currentMonth, 'yyyy-MM')}
-                onValueChange={(value) => setCurrentMonth(parseISO(value + '-15'))}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableMonths.map((month) => (
-                    <SelectItem key={format(month, 'yyyy-MM')} value={format(month, 'yyyy-MM')}>
-                      {format(month, 'MMMM yyyy', { locale: ptBR })}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MonthSelector 
+                value={currentMonth} 
+                onChange={setCurrentMonth}
+                triggerClassName="w-40"
+              />
               <Button variant="outline" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
