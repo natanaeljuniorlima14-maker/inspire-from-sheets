@@ -18,7 +18,7 @@ export function useMenuTypes() {
       const { data, error } = await supabase
         .from('menu_types')
         .select('*')
-        .order('name');
+        .order('created_at', { ascending: true });
       
       if (error) throw error;
       return data as MenuType[];
@@ -94,6 +94,7 @@ export function useDeleteMenuType() {
         throw new Error('Não é possível excluir este tipo pois existem cardápios associados a ele. Remova os cardápios primeiro.');
       }
       
+      // Delete the menu type (RLS will enforce admin-only)
       const { error } = await supabase
         .from('menu_types')
         .delete()

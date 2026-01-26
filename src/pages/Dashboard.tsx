@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react';
-import { format, startOfMonth, endOfMonth, addMonths, parseISO } from 'date-fns';
+import { format, endOfMonth, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useMenus } from '@/hooks/useMenus';
 import { useProducts } from '@/hooks/useProducts';
 import { useKits } from '@/hooks/useKits';
+import { MonthSelector } from '@/components/MonthSelector';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Calendar, 
   Package, 
@@ -27,25 +27,6 @@ export default function Dashboard() {
   const { data: products, isLoading: productsLoading } = useProducts();
   const { data: kits } = useKits();
 
-  // Generate months for navigation with current selected month first
-  const availableMonths = useMemo(() => {
-    const months: Date[] = [];
-    for (let i = -12; i <= 12; i++) {
-      months.push(addMonths(new Date(), i));
-    }
-    
-    const currentMonthStr = format(currentMonth, 'yyyy-MM');
-    
-    return months.sort((a, b) => {
-      const aStr = format(a, 'yyyy-MM');
-      const bStr = format(b, 'yyyy-MM');
-      
-      if (aStr === currentMonthStr) return -1;
-      if (bStr === currentMonthStr) return 1;
-      
-      return a.getTime() - b.getTime();
-    });
-  }, [currentMonth]);
 
   const stats = useMemo(() => {
     const totalProducts = products?.length || 0;
@@ -93,21 +74,11 @@ export default function Dashboard() {
             </p>
           </div>
           
-          <Select 
-            value={format(currentMonth, 'yyyy-MM')}
-            onValueChange={(value) => setCurrentMonth(parseISO(value + '-15'))}
-          >
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableMonths.map((month) => (
-                <SelectItem key={format(month, 'yyyy-MM')} value={format(month, 'yyyy-MM')}>
-                  {format(month, 'MMMM yyyy', { locale: ptBR })}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <MonthSelector 
+            value={currentMonth} 
+            onChange={setCurrentMonth}
+            triggerClassName="w-48"
+          />
         </div>
 
         {/* Stats Grid */}

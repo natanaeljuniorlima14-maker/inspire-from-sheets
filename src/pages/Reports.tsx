@@ -1,8 +1,10 @@
 import { useMemo, useState, useRef } from 'react';
 import { format, addMonths, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useNavigate } from 'react-router-dom';
 import { useMenus } from '@/hooks/useMenus';
 import { useMenuTypes } from '@/hooks/useMenuTypes';
+import { MonthSelector } from '@/components/MonthSelector';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,7 +21,8 @@ import {
   TrendingUp,
   DollarSign,
   Utensils,
-  BarChart3
+  BarChart3,
+  CalendarRange
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import Layout from '@/components/Layout';
@@ -27,6 +30,7 @@ import Layout from '@/components/Layout';
 const COLORS = ['hsl(142, 55%, 40%)', 'hsl(35, 90%, 55%)', 'hsl(200, 70%, 50%)', 'hsl(280, 60%, 55%)', 'hsl(0, 72%, 51%)', 'hsl(170, 60%, 40%)'];
 
 export default function Reports() {
+  const navigate = useNavigate();
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedMenuTypeId, setSelectedMenuTypeId] = useState<string>('all');
   const [selectedComparisonTypeIds, setSelectedComparisonTypeIds] = useState<string[]>([]);
@@ -35,15 +39,6 @@ export default function Reports() {
   const { data: menuTypes } = useMenuTypes();
   const { data: menus, isLoading } = useMenus(selectedMonth, selectedMenuTypeId === 'all' ? undefined : selectedMenuTypeId);
   const { data: allMenus } = useMenus(selectedMonth); // All menus for comparison
-
-  // Generate months (12 months back and 12 months forward)
-  const months = useMemo(() => {
-    const result = [];
-    for (let i = -12; i <= 12; i++) {
-      result.push(addMonths(new Date(), i));
-    }
-    return result;
-  }, []);
 
   const stats = useMemo(() => {
     if (!menus || menus.length === 0) {
@@ -287,22 +282,11 @@ export default function Reports() {
           </div>
           
           <div className="flex flex-wrap items-center gap-3">
-            <Select 
-              value={format(selectedMonth, 'yyyy-MM')}
-              onValueChange={(value) => setSelectedMonth(parseISO(value + '-15'))}
-            >
-              <SelectTrigger className="w-48">
-                <Calendar className="h-4 w-4 mr-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {months.map((month) => (
-                  <SelectItem key={format(month, 'yyyy-MM')} value={format(month, 'yyyy-MM')}>
-                    {format(month, 'MMMM yyyy', { locale: ptBR })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <MonthSelector
+              value={selectedMonth}
+              onChange={setSelectedMonth}
+              triggerClassName="w-48"
+            />
             
             <Select value={selectedMenuTypeId} onValueChange={setSelectedMenuTypeId}>
               <SelectTrigger className="w-40">
@@ -317,6 +301,11 @@ export default function Reports() {
                 ))}
               </SelectContent>
             </Select>
+            
+            <Button variant="outline" onClick={() => navigate('/annual-report')}>
+              <CalendarRange className="h-4 w-4 mr-2" />
+              Relatório Anual
+            </Button>
             
             <Button onClick={handleExportPDF}>
               <Download className="h-4 w-4 mr-2" />
